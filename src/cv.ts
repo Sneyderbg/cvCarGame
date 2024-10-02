@@ -3,8 +3,7 @@ import { Player } from "./common"
 const camVideo = document.getElementById("cam") as HTMLVideoElement
 const camSelect = document.getElementById("camSelect") as HTMLSelectElement
 const pBtn = document.getElementById("togglePause") as HTMLButtonElement
-const lowPicker = document.getElementById("lowColor") as HTMLInputElement
-const upperPicker = document.getElementById("upperColor") as HTMLInputElement
+const lowPicker = document.getElementById("upColor") as HTMLInputElement
 let devices: MediaDeviceInfo[] = []
 
 export let player: Player | null = null
@@ -179,12 +178,7 @@ export async function init() {
     const target = e.target as HTMLInputElement
     const { r, g, b } = hexToRgb(target.value)
     const [h, s, v] = rgbToHsv(r, g, b)
-    lowerHsvYellow = [h, s, v, 0]
-  }
-  upperPicker.onchange = (e) => {
-    const target = e.target as HTMLInputElement
-    const { r, g, b } = hexToRgb(target.value)
-    const [h, s, v] = rgbToHsv(r, g, b)
+    lowerHsvYellow = [(h - 40 + 255) % 255, s * .45, v * 0.35, 0]
     upperHsvYellow = [h, s, v, 255]
   }
 }
