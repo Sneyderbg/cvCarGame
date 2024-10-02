@@ -15,8 +15,8 @@ const width = camVideo.width
 const height = camVideo.height
 let cap: cv.VideoCapture
 
-let lowerHsvYellow = [20, 120, 100, 0]
-let upperHsvYellow = [60, 255, 255, 255]
+let lowerHsvYellow = [100, 100, 30, 0]
+let upperHsvYellow = [140, 255, 255, 255]
 const minArea = 500
 
 export let initialized: boolean = false
@@ -177,7 +177,12 @@ export async function init() {
   lowPicker.onchange = (e) => {
     const target = e.target as HTMLInputElement
     const { r, g, b } = hexToRgb(target.value)
-    const [h, s, v] = rgbToHsv(r, g, b)
+    let [h, s, v] = rgbToHsv(r, g, b)
+    h *= 180
+    s *= 255
+    v *= 255
+    console.log(h, s, v)
+
     lowerHsvYellow = [(h - 40 + 255) % 255, s * .45, v * 0.35, 0]
     upperHsvYellow = [h, s, v, 255]
   }
