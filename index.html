@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>carGame</title>
+</head>
+
+<body>
+  <div id="app">
+    <canvas id="canvas" width="800" height="600">
+    </canvas>
+    <canvas id="camCanvas" width="400" height="300"></canvas>
+    <video hidden id="cam" width="640" height="480"></video>
+    <label>cam: </label>
+    <select id="camSelect">
+    </select>
+    <button id="togglePause">play/pause</button>
+    <input type="color" id="lowColor"></input>
+    <input type="color" id="upperColor"></input>
+  </div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+
+</html>
