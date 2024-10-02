@@ -17,7 +17,6 @@ const nextFrame = () => requestAnimationFrame((time) => {
 })
 
 function configWS() {
-
   ws = new WebSocket("ws://localhost:3000")
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.addEventListener("message", (ev) => {
