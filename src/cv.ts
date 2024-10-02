@@ -135,6 +135,7 @@ export async function init() {
     }
   }, 0)
 
+  await navigator.mediaDevices.getUserMedia({ video: true })
   devices = await navigator.mediaDevices.enumerateDevices()
 
   devices.forEach((dev, idx) => {
