@@ -3,16 +3,20 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://sneyderbg.github.io/cvCarGame/",
   "scripts": {
     "dev": "concurrently -k -n server,vite \"bun --hot src/server.ts\" \"vite\" ",
     "server": "bun --hot src/server.ts",
     "vite": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "devDependencies": {
     "@types/bun": "^1.1.10",
     "concurrently": "^9.0.1",
+    "gh-pages": "^6.1.1",
     "typescript": "^5.5.3",
     "vite": "^5.4.1"
   },
