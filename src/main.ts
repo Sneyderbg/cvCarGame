@@ -17,7 +17,7 @@ const nextFrame = () => requestAnimationFrame((time) => {
 })
 
 function configWS() {
-  ws = new WebSocket("ws://localhost:3000")
+  ws = new WebSocket("ws://ec2-18-220-219-91.us-east-2.compute.amazonaws.com:3000")
   ws.addEventListener("message", (ev) => {
     let msg = JSON.parse(ev.data.toString()) as Message
     if (msg.msgType === "server") {
