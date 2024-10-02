@@ -1,4 +1,4 @@
-import { ClientMessage, Message, Player, ServerMessage, updatePlayer } from './common'
+import { ClientMessage, Message, newPlayer, Player, ServerMessage, updatePlayer } from './common'
 import './style.css'
 import { init, initialized, player, processVideo, setPlayer } from './cv'
 
@@ -17,38 +17,45 @@ const nextFrame = () => requestAnimationFrame((time) => {
 })
 
 function configWS() {
+
   ws = new WebSocket("ws://localhost:3000")
-  ws.addEventListener("message", (ev) => {
-    let msg = JSON.parse(ev.data.toString()) as Message
-    if (msg.msgType === "server") {
-      const message = msg.message as ServerMessage
-      if (message.msgType === "welcome") {
-        me = message.player.id
-        players[me] = message.player
-        setPlayer(players[me])
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.addEventListener("message", (ev) => {
+      let msg = JSON.parse(ev.data.toString()) as Message
+      if (msg.msgType === "server") {
+        const message = msg.message as ServerMessage
+        if (message.msgType === "welcome") {
+          me = message.player.id
+          players[me] = message.player
+          setPlayer(players[me])
+        }
+        if (message.msgType === "playerJoined" && message.player.id !== me) {
+          players[message.player.id] = message.player
+        }
+        if (message.msgType === "playerLeft" && message.player.id !== me) {
+          delete players[message.player.id]
+        }
+      } else {
+        const clientMessage = msg.message as ClientMessage
+        if (clientMessage.msType === "updateMovement") {
+          players[clientMessage.id].state.moving = clientMessage.moving ?? false
+          players[clientMessage.id].x = clientMessage.x ?? 0
+          players[clientMessage.id].y = clientMessage.y ?? 0
+        }
+        if (clientMessage.msType === "updateRotation") {
+          players[clientMessage.id].state.rotDir = clientMessage.rotDir ?? 0
+          players[clientMessage.id].angle = clientMessage.angle ?? 0
+        }
       }
-      if (message.msgType === "playerJoined" && message.player.id !== me) {
-        players[message.player.id] = message.player
-      }
-      if (message.msgType === "playerLeft" && message.player.id !== me) {
-        delete players[message.player.id]
-      }
-    } else {
-      const clientMessage = msg.message as ClientMessage
-      if (clientMessage.msType === "updateMovement") {
-        players[clientMessage.id].state.moving = clientMessage.moving ?? false
-        players[clientMessage.id].x = clientMessage.x ?? 0
-        players[clientMessage.id].y = clientMessage.y ?? 0
-      }
-      if (clientMessage.msType === "updateRotation") {
-        players[clientMessage.id].state.rotDir = clientMessage.rotDir ?? 0
-        players[clientMessage.id].angle = clientMessage.angle ?? 0
-      }
-    }
-  })
-  window.addEventListener("beforeunload", () => {
-    ws.close()
-  })
+    })
+    window.addEventListener("beforeunload", () => {
+      ws.close()
+    })
+  } else {
+    me = 0
+    players[me] = newPlayer(me)
+    setPlayer(players[me])
+  }
 }
 
 function configKeys() {
