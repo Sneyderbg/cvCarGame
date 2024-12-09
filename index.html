@@ -10,15 +10,23 @@
 
 <body>
   <div id="app">
-    <canvas id="canvas" width="800" height="600">
-    </canvas>
-    <canvas id="camCanvas" width="400" height="300"></canvas>
-    <video hidden id="cam" width="640" height="480"></video>
-    <label>cam: </label>
-    <select id="camSelect">
-    </select>
-    <button id="togglePause">play/pause</button>
-    <input type="color" id="upColor"></input>
+    <div id="main">
+      <span id="playerId">Connecting</span>
+      <canvas id="canvas" width="800" height="600">
+      </canvas>
+    </div>
+    <div >
+      <div id="menuControls">
+        <label>cam: </label>
+        <select id="camSelect"></select>
+        <input type="checkbox" id="togglePause">Enable cam</button>
+        <input type="color" id="upColor"></input>
+      </div>
+      <div>
+        <canvas id="camCanvas" width="400" height="300"></canvas>
+        <video hidden id="cam" width="640" height="480"></video>
+      </div>
+    </div>
   </div>
   <script type="module" src="./src/main.ts"></script>
 </body>
