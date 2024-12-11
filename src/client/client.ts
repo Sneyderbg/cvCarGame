@@ -13,16 +13,18 @@ export class Client {
   me: number = -1;
   players: { [id: string]: Player } = {};
   cameraEnabled: boolean = false;
-  connected = false;
+  connectionStatus: "online" | "connecting" | "offline" = "offline";
+  connectedAtTs = 0;
   messageQ: ServerMessage[] = [];
   actionQ: ClientMessage[] = []; // queue for prediction
   msgCount: number = 0;
+  serverUrl = "ws://localhost:3000";
 
   meAccordingToServer?: Player;
 
   constructor() {
     this.setupKeys();
-    this.connect("ws://localhost:3000");
+    this.connect();
   }
 
   setupKeys() {
@@ -53,13 +55,6 @@ export class Client {
       if (e.code === "ArrowDown") {
         this.players[this.me].backward();
       }
-
-      if (this.actionQ.length >= 2) {
-        const dt =
-          this.actionQ[this.actionQ.length - 1].ts -
-          this.actionQ[this.actionQ.length - 2].ts;
-        console.log(`lastDt: ${dt} ms`);
-      }
     });
     document.addEventListener("keyup", (e) => {
       // if an input key
@@ -81,14 +76,30 @@ export class Client {
     });
   }
 
-  connect(url: string) {
-    this.ws = new WebSocket(url);
+  connect() {
+    this.messageQ = [];
+    this.actionQ = [];
+    this.msgCount = 0;
+    for (let id in this.players) {
+      if (id !== this.me.toString()) {
+        delete this.players[id];
+      }
+    }
+    this.connectionStatus = "connecting";
+    playerIdEl.innerText = "Connecting...";
+
+    if (this.ws && this.ws.readyState == this.ws.OPEN) {
+      this.ws.close();
+    }
+
+    this.ws = new WebSocket(this.serverUrl);
 
     // timeout for server connection
     setTimeout(() => {
-      if (!this.connected) {
+      if (!this.connectionStatus) {
         console.log("Can't connect to server: timeout");
         this.ws.removeEventListener("open", () => {});
+        this.connectionStatus = "offline";
         playerIdEl.innerText = `Offline`;
         this.me = 0;
         this.players[this.me] = new Player(this.me);
@@ -96,22 +107,22 @@ export class Client {
     }, 1000);
 
     this.ws.addEventListener("open", () => {
-      this.connected = true;
+      this.connectionStatus = "online";
+      this.connectedAtTs = performance.now();
 
       this.ws.addEventListener("message", (ev) => {
         let msg = JSON.parse(ev.data.toString()) as ServerMessage;
-        if (msg.msgType == "welcome") {
-          this.me = msg.player!.id;
-          this.players[this.me] = Player.fromPlayer(msg.player!);
-          playerIdEl.innerText = `ID: ${this.me}`;
-        }
         this.messageQ.push(msg);
       });
     });
 
     this.ws.addEventListener("error", (ev) => {
       console.error("Websocket error: ", ev);
-      this.connected = false;
+      this.connectionStatus = "offline";
+    });
+
+    this.ws.addEventListener("close", () => {
+      this.connect();
     });
 
     window.addEventListener("beforeunload", () => {
@@ -120,10 +131,10 @@ export class Client {
   }
 
   sendPlayerState() {
-    if (this.connected && this.ws.readyState === this.ws.OPEN) {
+    if (this.connectionStatus === "online" && this.me >= 0) {
       const msg: ClientMessage = {
         msgSeq: this.msgCount++,
-        ts: performance.now(),
+        ts: performance.now() - this.connectedAtTs,
         playerId: this.me,
         state: this.players[this.me].state,
       };
@@ -137,8 +148,17 @@ export class Client {
     let msg = this.messageQ.length > 0 ? this.messageQ[0] : null;
     while (msg) {
       switch (msg.msgType) {
+        case "welcome":
+          if (this.me in this.players) {
+            delete this.players[this.me];
+          }
+          this.me = msg.player!.id;
+          this.players[this.me] = Player.fromPlayer(msg.player!);
+          playerIdEl.innerText = `ID: ${this.me}`;
+          break;
+
         case "playerJoined":
-          console.log("player joined with angle: ", msg.player!.angle);
+          console.log("playerJoined");
           this.players[msg.player!.id] = Player.fromPlayer(msg.player!);
           break;
 
@@ -152,11 +172,16 @@ export class Client {
               if (!this.meAccordingToServer) {
                 this.meAccordingToServer = Player.fromPlayer(player);
               } else {
-                this.meAccordingToServer.updateState(player);
+                this.meAccordingToServer.updateWith(player);
               }
+              this.players[this.me].updateWith(player, true);
               continue;
             }
-            this.players[player.id].updateState(player);
+            if (!(player.id in this.players)) {
+              console.log(this.messageQ);
+            } else {
+              this.players[player.id].updateWith(player);
+            }
           }
           break;
         default:
@@ -215,7 +240,7 @@ export class Client {
     }
 
     const player = this.meAccordingToServer;
-    if (player) {
+    if (this.connectionStatus && player) {
       ctx.fillStyle = "rgba(200, 0, 0, 0.6)";
       ctx.strokeStyle = "blue";
       ctx.lineWidth = 2;
@@ -232,12 +257,10 @@ export class Client {
   }
 
   update(dt: number) {
+    this.processMessages();
     for (let id in this.players) {
-      this.processMessages();
       this.players[id].update(dt);
     }
-    if (this.me >= 0) {
-      this.sendPlayerState();
-    }
+    this.sendPlayerState();
   }
 }

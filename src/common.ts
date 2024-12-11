@@ -34,7 +34,8 @@ export class Player implements IPlayer {
     this.id = id;
     this.x = 200;
     this.y = 100;
-    this.angle = properMod((-90 * Math.PI) / 180, 2 * Math.PI);
+    // this.angle = properMod((-90 * Math.PI) / 180, 2 * Math.PI);
+    this.angle = 0;
     this.velocity = 0;
     this.velScaling = 1;
     this.rotVel = 1;
@@ -56,7 +57,7 @@ export class Player implements IPlayer {
     return p;
   }
 
-  updateState(playerState: IPlayer) {
+  updateWith(playerState: IPlayer, onlyPhysics?: boolean) {
     // ignoring id
 
     this.x = playerState.x;
@@ -65,6 +66,8 @@ export class Player implements IPlayer {
     this.velocity = playerState.velocity;
     this.velScaling = playerState.velScaling;
     this.rotVel = playerState.rotVel;
+    if (onlyPhysics) return;
+
     this.state = playerState.state;
   }
 
@@ -102,6 +105,7 @@ export class Player implements IPlayer {
 
 export interface ServerMessage {
   msgType: "welcome" | "playerJoined" | "playerLeft" | "playerUpdate";
+  lastProcMsgSeq?: number;
   ts: number; // microseconds
   player?: IPlayer;
   players?: IPlayer[];

@@ -1,11 +1,11 @@
 {
   "name": "cargame",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,vite \"bun --hot src/server.ts\" \"vite\" ",
-    "server": "bun --hot src/server.ts",
+    "dev": "concurrently -k -n server,vite \"bun --watch src/server.ts\" \"vite\" ",
+    "server": "bun --watch src/server.ts",
     "vite": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"

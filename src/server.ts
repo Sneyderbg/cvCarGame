@@ -3,7 +3,7 @@ import { ClientMessage, Player, ServerMessage } from "./common";
 import { colors } from "./util";
 
 class Server {
-  TICKS_PER_SEC = 60;
+  TICKS_PER_SEC = 3;
   clients: {
     [playerId: number]: {
       ws: ServerWebSocket<unknown>;
@@ -12,7 +12,8 @@ class Server {
     };
   } = {};
   idCount = 0;
-  messageQ: (ClientMessage | ServerMessage)[] = [];
+  serverMessageQ: ServerMessage[] = [];
+  clienteMessageQ: ClientMessage[] = [];
 
   constructor() {
     setInterval(() => {
@@ -37,6 +38,7 @@ class Server {
     const msg: ServerMessage = {
       ts: performance.now(),
       msgType: "playerUpdate",
+      lastProcMsgSeq: -1,
       players: Object.values(this.clients).map(({ player }) => player),
     };
 
@@ -46,6 +48,9 @@ class Server {
   broadcast(msg: ServerMessage) {
     //TODO: change forEach to for in
     Object.entries(this.clients).forEach(([_k, v]) => {
+      if (msg.msgType === "playerUpdate") {
+        msg.lastProcMsgSeq = v.lastProcessedMessage?.msgSeq;
+      }
       v.ws.sendText(JSON.stringify(msg));
     });
   }
@@ -61,7 +66,7 @@ class Server {
       return;
     }
 
-    this.messageQ.push(message);
+    this.clienteMessageQ.push(message);
   }
 
   addClient(ws: ServerWebSocket<unknown>) {
@@ -73,11 +78,13 @@ class Server {
     };
     const message: ServerMessage = {
       ts: performance.now(),
+      lastProcMsgSeq: -1, // used only for playerUpdate
       msgType: "playerJoined",
       player,
     };
 
-    this.messageQ.push(message);
+    this.serverMessageQ.push(message);
+    this.idCount++;
   }
 
   removeClient(ws: ServerWebSocket<unknown>) {
@@ -86,11 +93,12 @@ class Server {
 
     const msg: ServerMessage = {
       ts: performance.now(),
+      lastProcMsgSeq: -1,
       msgType: "playerLeft",
       player: this.clients[playerId].player,
     };
 
-    this.messageQ.push(msg);
+    this.serverMessageQ.push(msg);
   }
 
   processServerMessage(msg: ServerMessage) {
@@ -109,7 +117,8 @@ class Server {
 
       case "playerJoined":
         msg.msgType = "welcome";
-        const ws = this.clients[msg.player!.id].ws;
+        const ws = this.clients[msg.player!.id]?.ws;
+        if (!ws) return; // TODO: log invalid msg
         ws.sendText(JSON.stringify(msg), true);
 
         // notify new player of other players
@@ -120,7 +129,7 @@ class Server {
             player: v.player,
           };
           console.log(
-            `Notifying player ${v.player.id} joined with angle: ${v.player.angle}`,
+            `${colors.FgYellow}Notifying${colors.Reset} player ${v.player.id} joined with angle: ${v.player.angle}`,
           );
           ws.send(JSON.stringify(pMsg), true);
         });
@@ -129,7 +138,9 @@ class Server {
         msg.msgType = "playerJoined";
 
         this.broadcast(msg);
-        console.log(`player ${this.idCount++} joined`);
+        console.log(
+          `player ${colors.FgCyan + msg.player!.id + colors.FgGreen} joined${colors.Reset}`,
+        );
         break;
 
       case "welcome":
@@ -138,28 +149,42 @@ class Server {
         break;
     }
   }
+
   processClientMessage(msg: ClientMessage) {
+    if (!(msg.playerId in this.clients)) {
+      console.log("player id not registered in clients", msg.playerId);
+      return;
+    }
+
     const lastMsg = this.clients[msg.playerId].lastProcessedMessage;
     const dt = lastMsg ? msg.ts - lastMsg.ts : 0;
     this.clients[msg.playerId].player.update(dt / 1000.0);
     this.clients[msg.playerId].player.state = msg.state;
     this.clients[msg.playerId].lastProcessedMessage = msg;
-    console.log(`lastDt: ${dt} ms`);
+    // console.log(`lastDt: ${dt} ms`);
   }
 
   processMessages() {
-    const now = performance.now();
-    for (let i = 0; i < this.messageQ.length; i++) {
-      const msg = this.messageQ[i];
-      if (msg.ts > now) {
-        continue;
-      } // dont process messages after current time
-      if ("msgType" in msg) {
+    let now = performance.now();
+    // already sorted?
+    while (this.serverMessageQ.length > 0) {
+      const msg = this.serverMessageQ[0];
+      if (msg.ts <= now) {
         this.processServerMessage(msg);
-      } else {
+      } // process messages before current time
+
+      this.serverMessageQ.splice(0, 1); // delete processed message
+    }
+
+    this.clienteMessageQ.sort((a, b) => a.msgSeq - b.msgSeq);
+    now = performance.now();
+    while (this.clienteMessageQ.length > 0) {
+      const msg = this.clienteMessageQ[0];
+      if (msg.ts <= now) {
         this.processClientMessage(msg);
-      }
-      this.messageQ.splice(i, 1); // delete processed message
+      } // process messages before current time
+
+      this.clienteMessageQ.splice(0, 1); // delete processed message
     }
   }
 }
@@ -180,7 +205,7 @@ const bun = Bun.serve({
     message: async (ws, message) => {
       //TODO: change this
       //simulate lag
-      await sleep(500);
+      await sleep(0);
       if (typeof message !== "string") {
         console.log("invalid message type");
         return;
