@@ -3,6 +3,7 @@ import { ClientMessage, Player, ServerMessage } from "../common";
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 const playerIdEl = document.getElementById("playerId") as HTMLSpanElement;
+// const info = document.getElementById("info") as HTMLSpanElement;
 if (!ctx) throw new Error("failed to get canvas context");
 
 export class Client {
@@ -12,15 +13,26 @@ export class Client {
   ws!: WebSocket;
   me: number = -1;
   players: { [id: string]: Player } = {};
+  playersOneTickBehind: typeof this.players = {};
   cameraEnabled: boolean = false;
   connectionStatus: "online" | "connecting" | "offline" = "offline";
   connectedAtTs = 0;
   messageQ: ServerMessage[] = [];
   actionQ: ClientMessage[] = []; // queue for prediction
   msgCount: number = 0;
+  lastProcMsgSeq = -1;
+  lastUpdateFromServer = 0;
   serverUrl = "ws://localhost:3000";
+  keys = {
+    left: false,
+    right: false,
+    up: false,
+    down: false,
+  };
 
   meAccordingToServer?: Player;
+  interpolateGhost = false;
+  interpolatedGhost?: Player;
 
   constructor() {
     this.setupKeys();
@@ -30,6 +42,11 @@ export class Client {
   setupKeys() {
     const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
     document.addEventListener("keydown", (e) => {
+      // DEBUG
+      if (e.code === "KeyD") {
+        console.log(this.actionQ[this.actionQ.length - 1].state);
+      }
+
       // if an input key
       if (keys.indexOf(e.key) !== -1) {
         e.preventDefault();
@@ -39,21 +56,19 @@ export class Client {
 
       if (e.repeat) return;
 
-      // rotation
-      if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
-        if (e.code === "ArrowLeft") {
-          this.players[this.me].rotateLeft();
-        } else {
-          this.players[this.me].rotateRight();
-        }
-      }
-
-      // movement
-      if (e.code === "ArrowUp") {
-        this.players[this.me].forward();
-      }
-      if (e.code === "ArrowDown") {
-        this.players[this.me].backward();
+      switch (e.code) {
+        case "ArrowLeft":
+          this.keys.left = true;
+          break;
+        case "ArrowRight":
+          this.keys.right = true;
+          break;
+        case "ArrowUp":
+          this.keys.up = true;
+          break;
+        case "ArrowDown":
+          this.keys.down = true;
+          break;
       }
     });
     document.addEventListener("keyup", (e) => {
@@ -64,14 +79,19 @@ export class Client {
         return;
       }
 
-      // rotation
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        this.players[this.me].stopRotation();
-      }
-
-      // movement
-      if (e.code === "ArrowUp" || e.code === "ArrowDown") {
-        this.players[this.me].stop();
+      switch (e.code) {
+        case "ArrowLeft":
+          this.keys.left = false;
+          break;
+        case "ArrowRight":
+          this.keys.right = false;
+          break;
+        case "ArrowUp":
+          this.keys.up = false;
+          break;
+        case "ArrowDown":
+          this.keys.down = false;
+          break;
       }
     });
   }
@@ -96,7 +116,7 @@ export class Client {
 
     // timeout for server connection
     setTimeout(() => {
-      if (!this.connectionStatus) {
+      if (this.connectionStatus !== "online") {
         console.log("Can't connect to server: timeout");
         this.ws.removeEventListener("open", () => {});
         this.connectionStatus = "offline";
@@ -114,15 +134,17 @@ export class Client {
         let msg = JSON.parse(ev.data.toString()) as ServerMessage;
         this.messageQ.push(msg);
       });
+
+      this.ws.addEventListener("close", () => {
+        setTimeout(() => {
+          this.connect();
+        }, 500);
+      });
     });
 
     this.ws.addEventListener("error", (ev) => {
       console.error("Websocket error: ", ev);
       this.connectionStatus = "offline";
-    });
-
-    this.ws.addEventListener("close", () => {
-      this.connect();
     });
 
     window.addEventListener("beforeunload", () => {
@@ -131,14 +153,20 @@ export class Client {
   }
 
   sendPlayerState() {
-    if (this.connectionStatus === "online" && this.me >= 0) {
+    if (
+      this.connectionStatus === "online" &&
+      this.ws.readyState === this.ws.OPEN &&
+      this.me >= 0
+    ) {
       const msg: ClientMessage = {
         msgSeq: this.msgCount++,
         ts: performance.now() - this.connectedAtTs,
         playerId: this.me,
-        state: this.players[this.me].state,
+        state: { ...this.players[this.me].state },
       };
 
+      // setTimeout(() => {
+      // }, 200);
       this.ws.send(JSON.stringify(msg));
       this.actionQ.push(msg);
     }
@@ -158,12 +186,16 @@ export class Client {
           break;
 
         case "playerJoined":
-          console.log("playerJoined");
+          if (msg.player!.id === this.me) break;
           this.players[msg.player!.id] = Player.fromPlayer(msg.player!);
+          this.playersOneTickBehind[msg.player!.id] = Player.fromPlayer(
+            msg.player!,
+          );
           break;
 
         case "playerLeft":
           delete this.players[msg.player!.id];
+          delete this.playersOneTickBehind[msg.player!.id];
           break;
 
         case "playerUpdate":
@@ -171,17 +203,38 @@ export class Client {
             if (player.id === this.me) {
               if (!this.meAccordingToServer) {
                 this.meAccordingToServer = Player.fromPlayer(player);
+                this.meAccordingToServer.color = "rgba(200, 0, 0, 0.4)";
               } else {
-                this.meAccordingToServer.updateWith(player);
+                this.meAccordingToServer.setTo(player);
               }
-              this.players[this.me].updateWith(player, true);
+
+              this.lastProcMsgSeq = msg.lastProcMsgSeq!;
+              this.lastUpdateFromServer =
+                performance.now() - this.connectedAtTs;
+
+              // reconciliation
+              this.players[this.me].setTo(this.meAccordingToServer);
+              let i = 0;
+              while (
+                i < this.actionQ.length &&
+                this.actionQ[i].msgSeq <= this.lastProcMsgSeq
+              ) {
+                i++;
+              } // stops at equal
+
+              this.actionQ.splice(0, i - 1); // keep processed action
+
+              // reapply unseen input by server
+              for (i = 1; i < this.actionQ.length; i++) {
+                const dt = this.actionQ[i].ts - this.actionQ[i - 1].ts;
+                this.players[this.me].setState(this.actionQ[i].state);
+                this.players[this.me].update(dt / 1000.0);
+              }
+
               continue;
             }
-            if (!(player.id in this.players)) {
-              console.log(this.messageQ);
-            } else {
-              this.players[player.id].updateWith(player);
-            }
+            this.playersOneTickBehind[player.id].setTo(this.players[player.id]);
+            this.players[player.id].setTo(player);
           }
           break;
         default:
@@ -191,76 +244,82 @@ export class Client {
       this.messageQ.splice(0, 1);
       msg = this.messageQ.length > 0 ? this.messageQ[0] : null;
     }
-
-    // if (msg.msgType === "server") {
-    //   const message = msg.message as ServerMessage;
-    //   if (message.msgType === "welcome") {
-    //     me = message.player.id;
-    //     players[me] = message.player;
-    //     setPlayer(players[me]);
-    //   }
-    //   if (message.msgType === "playerJoined" && message.player.id !== me) {
-    //     players[message.player.id] = message.player;
-    //     console.log(message.player.id, message.player.angle);
-    //   }
-    //   if (message.msgType === "playerLeft" && message.player.id !== me) {
-    //     delete players[message.player.id];
-    //   }
-    // } else {
-    //   const clientMessage = msg.message as ClientMessage;
-    //   if (clientMessage.msType === "updateMovement") {
-    //     players[clientMessage.id].state.moving = clientMessage.moving ?? false;
-    //     players[clientMessage.id].x = clientMessage.x ?? 0;
-    //     players[clientMessage.id].y = clientMessage.y ?? 0;
-    //   }
-    //   if (clientMessage.msType === "updateRotation") {
-    //     players[clientMessage.id].state.rotDir = clientMessage.rotDir ?? 0;
-    //     players[clientMessage.id].angle = clientMessage.angle ?? 0;
-    //   }
-    // }
   }
 
   render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const [w, h] = [50, 20];
     for (const id in this.players) {
-      const player = this.players[id];
-      ctx.fillStyle = "red";
-      ctx.strokeStyle = "blue";
-      ctx.lineWidth = 2;
-      ctx.translate(player.x, player.y);
-      ctx.rotate(player.angle);
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(w, 0);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.resetTransform();
+      if (id === this.me.toString()) {
+        this.players[this.me].draw(ctx);
+      } else {
+        const progress =
+          performance.now() - this.connectedAtTs - this.lastUpdateFromServer;
+        const interpolatedP = Player.lerpPlayer(
+          this.playersOneTickBehind[id],
+          this.players[id],
+          (progress * 3) / 1000.0,
+        );
+        interpolatedP.draw(ctx);
+      }
     }
 
-    const player = this.meAccordingToServer;
-    if (this.connectionStatus && player) {
-      ctx.fillStyle = "rgba(200, 0, 0, 0.6)";
-      ctx.strokeStyle = "blue";
-      ctx.lineWidth = 2;
-      ctx.translate(player.x, player.y);
-      ctx.rotate(player.angle);
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(w, 0);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.resetTransform();
+    if (
+      import.meta.env.DEV &&
+      this.connectionStatus &&
+      this.meAccordingToServer
+    ) {
+      if (this.interpolateGhost) {
+        if (!this.interpolatedGhost) {
+          this.interpolatedGhost = Player.fromPlayer(this.meAccordingToServer);
+        }
+        this.interpolatedGhost.lerpTo(this.meAccordingToServer, 0.125);
+
+        this.interpolatedGhost.draw(ctx);
+      } else {
+        this.meAccordingToServer.draw(ctx);
+      }
+    }
+  }
+
+  handleInput() {
+    const p = this.players[this.me];
+    if (!p) return;
+
+    if (
+      (!this.keys.left && !this.keys.right) ||
+      (this.keys.left && this.keys.right)
+    ) {
+      p.stopRotation();
+    }
+    if (this.keys.left) {
+      p.rotateLeft();
+    }
+    if (this.keys.right) {
+      p.rotateRight();
+    }
+
+    if (
+      (!this.keys.up && !this.keys.down) ||
+      (this.keys.up && this.keys.down)
+    ) {
+      p.stop();
+    }
+    if (this.keys.up) {
+      p.forward();
+    }
+    if (this.keys.down) {
+      p.backward();
     }
   }
 
   update(dt: number) {
     this.processMessages();
-    for (let id in this.players) {
-      this.players[id].update(dt);
-    }
+    this.handleInput();
     this.sendPlayerState();
+    for (let id in this.players) {
+      if (id === this.me.toString()) {
+        this.players[id].update(dt);
+      }
+    }
   }
 }

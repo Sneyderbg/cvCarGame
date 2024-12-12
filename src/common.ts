@@ -1,23 +1,33 @@
-import { properMod } from "./util";
+import { lerp, properMod, rLerp } from "./util";
 
 export const ROT_VEL = 1.6;
 export const MOV_VEL = 200;
 
+interface PlayerState {
+  rotDir: -1 | 0 | 1;
+  moving: -1 | 0 | 1;
+}
+
 export interface IPlayer {
   id: number;
+  color: string;
   x: number;
   y: number;
   angle: number;
   velocity: number;
   velScaling: number;
   rotVel: number;
-  state: {
-    rotDir: -1 | 0 | 1;
-    moving: -1 | 0 | 1;
-  };
+  state: PlayerState;
 }
 
 export class Player implements IPlayer {
+  CANVAS_WIDTH = 800;
+  CANVAS_HEIGHT = 600;
+  w = 50;
+  h = 20;
+  color = "red";
+  frontColor = "blue";
+
   id: number;
   x: number;
   y: number;
@@ -53,22 +63,42 @@ export class Player implements IPlayer {
     p.velocity = player.velocity;
     p.velScaling = player.velScaling;
     p.rotVel = player.rotVel;
-    p.state = player.state;
+    p.setState(player.state);
+    p.color = player.color;
     return p;
   }
 
-  updateWith(playerState: IPlayer, onlyPhysics?: boolean) {
+  static lerpPlayer(playerFrom: IPlayer, playerTo: IPlayer, x: number) {
+    x = Math.max(0, Math.min(x, 1));
+    const l = Player.fromPlayer(playerFrom);
+    l.x = lerp(l.x, playerTo.x, x);
+    l.y = lerp(l.y, playerTo.y, x);
+    l.angle = rLerp(l.angle, playerTo.angle, x);
+    return l;
+  }
+
+  lerpTo(playerTo: IPlayer, x: number) {
+    this.x = lerp(this.x, playerTo.x, x);
+    this.y = lerp(this.y, playerTo.y, x);
+    this.angle = rLerp(this.angle, playerTo.angle, x);
+  }
+
+  setTo(player: IPlayer, onlyPhysics?: boolean) {
     // ignoring id
 
-    this.x = playerState.x;
-    this.y = playerState.y;
-    this.angle = playerState.angle;
-    this.velocity = playerState.velocity;
-    this.velScaling = playerState.velScaling;
-    this.rotVel = playerState.rotVel;
+    this.x = player.x;
+    this.y = player.y;
+    this.angle = player.angle;
+    this.velocity = player.velocity;
+    this.velScaling = player.velScaling;
+    this.rotVel = player.rotVel;
     if (onlyPhysics) return;
 
-    this.state = playerState.state;
+    this.setState(player.state);
+  }
+
+  setState(state: PlayerState) {
+    this.state = { ...state };
   }
 
   rotateLeft() {
@@ -89,8 +119,22 @@ export class Player implements IPlayer {
   stop() {
     this.state.moving = 0;
   }
-  CANVAS_WIDTH = 800;
-  CANVAS_HEIGHT = 600;
+
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = this.color;
+    ctx.strokeStyle = this.frontColor;
+    ctx.lineWidth = 2;
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(this.w, 0);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.resetTransform();
+  }
+
   // dt in s
   update(dt: number) {
     this.angle += ROT_VEL * this.state.rotDir * this.rotVel * dt;

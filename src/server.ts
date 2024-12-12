@@ -1,9 +1,12 @@
-import { ServerWebSocket, sleep } from "bun";
+import { ServerWebSocket } from "bun";
 import { ClientMessage, Player, ServerMessage } from "./common";
 import { colors } from "./util";
+import Logger, { ILogLevel } from "js-logger";
 
 class Server {
   TICKS_PER_SEC = 3;
+  LOG_LEVEL: ILogLevel = Logger.INFO;
+
   clients: {
     [playerId: number]: {
       ws: ServerWebSocket<unknown>;
@@ -13,9 +16,15 @@ class Server {
   } = {};
   idCount = 0;
   serverMessageQ: ServerMessage[] = [];
-  clienteMessageQ: ClientMessage[] = [];
+  clientMessageQ: ClientMessage[] = [];
 
   constructor() {
+    Logger.useDefaults({
+      defaultLevel: this.LOG_LEVEL,
+      formatter: (msgs, ctx) => {
+        msgs.unshift(`${ctx.level.name}:`);
+      },
+    });
     setInterval(() => {
       this.tick(1 / this.TICKS_PER_SEC);
     }, 1000 / this.TICKS_PER_SEC);
@@ -61,12 +70,16 @@ class Server {
       return;
     }
     if (playerId !== message.playerId) {
-      console.log("not allowed to change another player's state");
+      Logger.warn(
+        "not allowed to change another player's state",
+        `player ${playerId} tried to change ${message.playerId}`,
+      );
+      Logger.warn("disconnecting player", playerId);
       this.clients[playerId].ws.close(4444, "not allowed");
       return;
     }
 
-    this.clienteMessageQ.push(message);
+    this.clientMessageQ.push(message);
   }
 
   addClient(ws: ServerWebSocket<unknown>) {
@@ -107,19 +120,26 @@ class Server {
         const playerId = msg.player!.id;
         delete this.clients[playerId];
         this.broadcast(msg);
-
-        console.log(
-          `player ${colors.FgCyan + playerId + colors.FgRed} left`,
-          colors.Reset,
+        // discard this client's messages
+        this.clientMessageQ = this.clientMessageQ.filter(
+          (m) => m.playerId !== playerId,
         );
-        console.log("num of players: ", Object.entries(this.clients).length);
+
+        Logger.info(
+          `player ${colors.FgCyan + playerId + colors.FgRed} left  ${colors.Reset}`,
+          "| total:",
+          Object.keys(this.clients).length,
+        );
         break;
 
       case "playerJoined":
         msg.msgType = "welcome";
         const ws = this.clients[msg.player!.id]?.ws;
-        if (!ws) return; // TODO: log invalid msg
-        ws.sendText(JSON.stringify(msg), true);
+        if (!ws) {
+          Logger.error("player", msg.player!.id, "not in clients");
+          return;
+        }
+        ws.send(JSON.stringify(msg), true);
 
         // notify new player of other players
         Object.entries(this.clients).forEach(([_k, v]) => {
@@ -128,18 +148,23 @@ class Server {
             msgType: "playerJoined",
             player: v.player,
           };
-          console.log(
-            `${colors.FgYellow}Notifying${colors.Reset} player ${v.player.id} joined with angle: ${v.player.angle}`,
-          );
           ws.send(JSON.stringify(pMsg), true);
         });
+        Logger.debug(
+          `${colors.FgYellow}Notifying${colors.Reset} players already in game to player ${colors.FgCyan}${msg.player!.id}${colors.Reset}`,
+        );
 
         // notify other players of new player
         msg.msgType = "playerJoined";
 
         this.broadcast(msg);
-        console.log(
+        Logger.debug(
+          `${colors.FgYellow}Notifying${colors.Reset} all players that player ${colors.FgCyan}${msg.player!.id} ${colors.FgGreen}joined${colors.Reset}`,
+        );
+        Logger.info(
           `player ${colors.FgCyan + msg.player!.id + colors.FgGreen} joined${colors.Reset}`,
+          "| total:",
+          Object.keys(this.clients).length,
         );
         break;
 
@@ -152,7 +177,12 @@ class Server {
 
   processClientMessage(msg: ClientMessage) {
     if (!(msg.playerId in this.clients)) {
-      console.log("player id not registered in clients", msg.playerId);
+      Logger.warn(
+        "player id not registered in clients: ",
+        msg.playerId,
+        Object.keys(this.clients),
+        "-> Discarding msg",
+      );
       return;
     }
 
@@ -161,7 +191,6 @@ class Server {
     this.clients[msg.playerId].player.update(dt / 1000.0);
     this.clients[msg.playerId].player.state = msg.state;
     this.clients[msg.playerId].lastProcessedMessage = msg;
-    // console.log(`lastDt: ${dt} ms`);
   }
 
   processMessages() {
@@ -176,15 +205,15 @@ class Server {
       this.serverMessageQ.splice(0, 1); // delete processed message
     }
 
-    this.clienteMessageQ.sort((a, b) => a.msgSeq - b.msgSeq);
+    this.clientMessageQ.sort((a, b) => a.msgSeq - b.msgSeq);
     now = performance.now();
-    while (this.clienteMessageQ.length > 0) {
-      const msg = this.clienteMessageQ[0];
+    while (this.clientMessageQ.length > 0) {
+      const msg = this.clientMessageQ[0];
       if (msg.ts <= now) {
         this.processClientMessage(msg);
       } // process messages before current time
 
-      this.clienteMessageQ.splice(0, 1); // delete processed message
+      this.clientMessageQ.splice(0, 1); // delete processed message
     }
   }
 }
@@ -203,14 +232,11 @@ const bun = Bun.serve({
       server.addClient(ws);
     },
     message: async (ws, message) => {
-      //TODO: change this
-      //simulate lag
-      await sleep(0);
       if (typeof message !== "string") {
-        console.log("invalid message type");
+        Logger.error("invalid message type");
         return;
       }
-      // console.log(`got ${message}`);
+      Logger.trace(`got ${message}`);
       server.addMessage(ws, JSON.parse(message));
     },
     close: (ws) => {

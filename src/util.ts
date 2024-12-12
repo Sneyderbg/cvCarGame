@@ -1,3 +1,13 @@
+function lerp(a: number, b: number, x: number) {
+  return a + (b - a) * x;
+}
+
+function rLerp(A: number, B: number, w: number) {
+  let CS = (1 - w) * Math.cos(A) + w * Math.cos(B);
+  let SN = (1 - w) * Math.sin(A) + w * Math.sin(B);
+  return Math.atan2(SN, CS);
+}
+
 function hexToRgb(hex: string) {
   var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -77,4 +87,4 @@ const colors = {
   BgGray: "\x1b[100m",
 };
 
-export { hexToRgb, rgbToHsv, colors, properMod };
+export { colors, hexToRgb, lerp, rLerp, properMod, rgbToHsv };
