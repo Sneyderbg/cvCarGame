@@ -1,7 +1,7 @@
 import { ServerWebSocket } from "bun";
-import { ClientMessage, Player, ServerMessage } from "./common";
-import { colors } from "./util";
 import Logger, { ILogLevel } from "js-logger";
+import { Player, ClientMessage, ServerMessage } from "./shared/common";
+import { colors } from "./shared/util";
 
 class Server {
   TICKS_PER_SEC = 3;

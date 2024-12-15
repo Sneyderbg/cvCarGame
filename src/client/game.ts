@@ -1,12 +1,14 @@
-import { ClientMessage, Player, ServerMessage } from "../common";
+import { Player, ServerMessage, ClientMessage } from "../shared/common";
+import { capturingCam, getImage, getSelectedRange, setImage } from "./camera";
+import { Params, Result } from "./cvWorker";
+import ProcessorWorker from "./cvWorker.ts?worker";
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 const playerIdEl = document.getElementById("playerId") as HTMLSpanElement;
-// const info = document.getElementById("info") as HTMLSpanElement;
 if (!ctx) throw new Error("failed to get canvas context");
 
-export class Client {
+export class GameClient {
   // ===========
   // Game state
   // ===========
@@ -34,9 +36,19 @@ export class Client {
   interpolateGhost = false;
   interpolatedGhost?: Player;
 
+  cvWorker: Worker;
+  workerWorking = false;
   constructor() {
     this.setupKeys();
     this.connect();
+    this.cvWorker = new ProcessorWorker();
+    this.cvWorker.onmessage = (ev) => {
+      this.workerWorking = false;
+      const res = ev.data as Result;
+      if (res.success) {
+        this.processWorkerResult(res);
+      }
+    };
   }
 
   setupKeys() {
@@ -312,13 +324,66 @@ export class Client {
     }
   }
 
+  processWorkerResult(res: Result) {
+    setImage(res.overlay!);
+    if (this.me in this.players && res.player) {
+      if (res.player.state.moving !== 0) {
+        this.players[this.me].velScaling = res.player.velScaling;
+        if (res.player.state.moving === -1) {
+          this.keys.up = false;
+          this.keys.down = true;
+        } else {
+          this.keys.down = false;
+          this.keys.up = true;
+        }
+      } else {
+        this.players[this.me].velScaling = 1;
+      }
+
+      if (res.player.state.rotDir !== 0) {
+        this.players[this.me].rotVel = res.player.rotVel;
+        if (res.player.state.rotDir === -1) {
+          this.keys.left = false;
+          this.keys.right = true;
+        } else {
+          this.keys.right = false;
+          this.keys.left = true;
+        }
+      } else {
+        this.players[this.me].rotVel = 1;
+      }
+    }
+  }
+
+  updateWorker() {
+    if (!this.workerWorking && capturingCam) {
+      const frame = getImage();
+      if (frame) {
+        const params: Params = {
+          image: {
+            colorSpace: frame.colorSpace,
+            data: frame.data,
+            width: frame.width,
+            height: frame.height,
+          },
+          colorRange: {
+            ...getSelectedRange(),
+          },
+        };
+        this.cvWorker.postMessage(params);
+        this.workerWorking = true;
+      }
+    }
+  }
+
   update(dt: number) {
     this.processMessages();
     this.handleInput();
     this.sendPlayerState();
+    this.updateWorker();
     for (let id in this.players) {
       if (id === this.me.toString()) {
-        this.players[id].update(dt);
+        this.players[this.me].update(dt);
       }
     }
   }

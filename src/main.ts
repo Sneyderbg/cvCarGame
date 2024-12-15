@@ -1,8 +1,8 @@
 import "./style.css";
-// import { init, initialized, processVideo } from "./client/cv";
-import { Client } from "./client/client";
+import { GameClient } from "./client/game";
+import { setupCamControls } from "./client/camera";
 
-const client = new Client();
+const client = new GameClient();
 
 let lastTime = 0;
 const nextFrame = () =>
@@ -21,5 +21,5 @@ function loop(dt: number) {
   nextFrame();
 }
 
-// init();
+setupCamControls();
 nextFrame();
