@@ -147,8 +147,11 @@ export function setupCamControls() {
     // s *= 255;
     // v *= 255;
 
-    lowerHsv = [clamp(h - 180 * amp, 0, 180), 80, 30, 0];
+    lowerHsv = [clamp(h - 180 * amp, 0, 180), 80, 60 - 40 * amp, 0];
     upperHsv = [clamp(h + 180 * amp, 0, 180), 255, 255, 255];
+
+    console.log(lowerHsv);
+    console.log(upperHsv);
   }
 
   colorAmplitude.min = "0";

@@ -4,7 +4,7 @@ import { Player, ClientMessage, ServerMessage } from "./shared/common";
 import { colors } from "./shared/util";
 
 class Server {
-  TICKS_PER_SEC = 3;
+  TICKS_PER_SEC = 30;
   LOG_LEVEL: ILogLevel = Logger.INFO;
 
   clients: {
@@ -189,7 +189,7 @@ class Server {
     const lastMsg = this.clients[msg.playerId].lastProcessedMessage;
     const dt = lastMsg ? msg.ts - lastMsg.ts : 0;
     this.clients[msg.playerId].player.update(dt / 1000.0);
-    this.clients[msg.playerId].player.state = msg.state;
+    this.clients[msg.playerId].player.state = { ...msg.state };
     this.clients[msg.playerId].lastProcessedMessage = msg;
   }
 

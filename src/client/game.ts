@@ -16,7 +16,6 @@ export class GameClient {
   me: number = -1;
   players: { [id: string]: Player } = {};
   playersOneTickBehind: typeof this.players = {};
-  cameraEnabled: boolean = false;
   connectionStatus: "online" | "connecting" | "offline" = "offline";
   connectedAtTs = 0;
   messageQ: ServerMessage[] = [];
@@ -40,29 +39,25 @@ export class GameClient {
   workerWorking = false;
   constructor() {
     this.setupKeys();
-    this.connect();
+    this.connect("offline");
     this.cvWorker = new ProcessorWorker();
     this.cvWorker.onmessage = (ev) => {
-      this.workerWorking = false;
       const res = ev.data as Result;
-      if (res.success) {
-        this.processWorkerResult(res);
-      }
+      this.processWorkerResult(res);
     };
   }
 
   setupKeys() {
     const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
     document.addEventListener("keydown", (e) => {
-      // DEBUG
-      if (e.code === "KeyD") {
-        console.log(this.actionQ[this.actionQ.length - 1].state);
-      }
-
       // if an input key
       if (keys.indexOf(e.key) !== -1) {
         e.preventDefault();
       } else {
+        return;
+      }
+
+      if (capturingCam) {
         return;
       }
 
@@ -91,6 +86,8 @@ export class GameClient {
         return;
       }
 
+      if (capturingCam) return;
+
       switch (e.code) {
         case "ArrowLeft":
           this.keys.left = false;
@@ -108,7 +105,20 @@ export class GameClient {
     });
   }
 
-  connect() {
+  connect(url: string | "offline") {
+    const offlineConn = () => {
+      this.connectionStatus = "offline";
+      playerIdEl.innerText = `Offline`;
+      this.me = 0;
+      this.players[this.me] = new Player(this.me);
+    };
+
+    if (url === "offline") {
+      offlineConn();
+      return;
+    }
+
+    this.serverUrl = url;
     this.messageQ = [];
     this.actionQ = [];
     this.msgCount = 0;
@@ -131,10 +141,7 @@ export class GameClient {
       if (this.connectionStatus !== "online") {
         console.log("Can't connect to server: timeout");
         this.ws.removeEventListener("open", () => {});
-        this.connectionStatus = "offline";
-        playerIdEl.innerText = `Offline`;
-        this.me = 0;
-        this.players[this.me] = new Player(this.me);
+        offlineConn();
       }
     }, 1000);
 
@@ -149,7 +156,7 @@ export class GameClient {
 
       this.ws.addEventListener("close", () => {
         setTimeout(() => {
-          this.connect();
+          this.connect(this.serverUrl);
         }, 500);
       });
     });
@@ -269,7 +276,7 @@ export class GameClient {
         const interpolatedP = Player.lerpPlayer(
           this.playersOneTickBehind[id],
           this.players[id],
-          (progress * 3) / 1000.0,
+          (progress * 30) / 1000.0,
         );
         interpolatedP.draw(ctx);
       }
@@ -325,34 +332,39 @@ export class GameClient {
   }
 
   processWorkerResult(res: Result) {
+    if (!res.success) {
+      return;
+    }
+
     setImage(res.overlay!);
     if (this.me in this.players && res.player) {
-      if (res.player.state.moving !== 0) {
-        this.players[this.me].velScaling = res.player.velScaling;
-        if (res.player.state.moving === -1) {
-          this.keys.up = false;
-          this.keys.down = true;
-        } else {
-          this.keys.down = false;
-          this.keys.up = true;
-        }
+      this.players[this.me].state.velScaling = res.player.state.velScaling;
+      const moving = res.player.state.moving;
+      if (moving === -1) {
+        this.keys.up = false;
+        this.keys.down = true;
+      } else if (moving === 1) {
+        this.keys.down = false;
+        this.keys.up = true;
       } else {
-        this.players[this.me].velScaling = 1;
+        this.keys.down = false;
+        this.keys.up = false;
       }
 
-      if (res.player.state.rotDir !== 0) {
-        this.players[this.me].rotVel = res.player.rotVel;
-        if (res.player.state.rotDir === -1) {
-          this.keys.left = false;
-          this.keys.right = true;
-        } else {
-          this.keys.right = false;
-          this.keys.left = true;
-        }
+      this.players[this.me].state.rotVel = res.player.state.rotVel;
+      const rotDir = res.player.state.rotDir;
+      if (rotDir === -1) {
+        this.keys.left = false;
+        this.keys.right = true;
+      } else if (rotDir === 1) {
+        this.keys.right = false;
+        this.keys.left = true;
       } else {
-        this.players[this.me].rotVel = 1;
+        this.keys.right = false;
+        this.keys.left = false;
       }
     }
+    this.workerWorking = false;
   }
 
   updateWorker() {

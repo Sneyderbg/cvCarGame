@@ -33,26 +33,30 @@ self.addEventListener("message", (ev) => {
   }
   const params = ev.data as Params;
 
-  const proc = processVideo(
-    cv.matFromImageData(params.image),
-    params.colorRange.lower,
-    params.colorRange.upper,
-  );
-  res.player = proc.player;
-  res.overlay = {
-    colorSpace: params.image.colorSpace,
-    data: new Uint8ClampedArray(proc.overlay!.data),
-    width: proc.overlay!.cols,
-    height: proc.overlay!.rows,
-  };
+  try {
+    const proc = processVideo(
+      cv.matFromImageData(params.image),
+      params.colorRange.lower,
+      params.colorRange.upper,
+    );
+    res.player = proc.player;
+    res.overlay = {
+      colorSpace: params.image.colorSpace,
+      data: new Uint8ClampedArray(proc.overlay!.data),
+      width: proc.overlay!.cols,
+      height: proc.overlay!.rows,
+    };
+    res.success = true;
+    postMessage(res);
+  } catch (e) {
+    console.log("error at processVideo: ");
+    console.error(e);
 
-  // res.overlay = {
-  //   colorSpace: params.image.colorSpace,
-  //   data: params.image.data,
-  //   width: params.image.width,
-  //   height: params.image.height,
-  // };
-
-  res.success = true;
-  postMessage(res);
+    const res: Result = {
+      success: false,
+      error: "cv error",
+    };
+    postMessage(res);
+    initOCV();
+  }
 });

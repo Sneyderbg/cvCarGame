@@ -1,6 +1,7 @@
 import "./style.css";
 import { GameClient } from "./client/game";
 import { setupCamControls } from "./client/camera";
+import { setupOtherControls } from "./client/controls";
 
 const client = new GameClient();
 
@@ -22,4 +23,7 @@ function loop(dt: number) {
 }
 
 setupCamControls();
+setupOtherControls((url) => {
+  client.connect(url);
+});
 nextFrame();

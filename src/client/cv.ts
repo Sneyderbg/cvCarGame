@@ -61,20 +61,22 @@ export function processVideo(
     const x = objects[0].x - objects[1].x;
     const y = objects[0].y - objects[1].y;
     const slope = Math.max(-10, Math.min(10, y / x));
-    player.rotVel = Math.abs(slope);
-    slope < -rotSens
-      ? player.rotateRight()
-      : slope > rotSens
-        ? player.rotateLeft()
-        : player.stopRotation();
+    player.state.rotVel = Math.abs(slope);
+    if (slope < -rotSens) {
+      player.rotateRight();
+    } else if (slope > rotSens) {
+      player.rotateLeft();
+    } else {
+      player.stopRotation();
+    }
 
     const length = Math.sqrt(x * x + y * y);
     const relLength = length / img.cols; //width proportion
     if (relLength >= 0.1) {
-      player.velScaling = relLength;
+      player.state.velScaling = relLength;
       player.forward();
     } else {
-      player.velScaling = 1;
+      player.state.velScaling = 1;
       player.stop();
     }
 
@@ -90,8 +92,7 @@ export function processVideo(
     //   [255, 255, 255, 255],
     // );
   } else {
-    player.state.rotDir = 0;
-    player.state.moving = 0;
+    player.resetMovement();
   }
 
   hsv.delete();

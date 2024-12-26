@@ -6,6 +6,8 @@ export const MOV_VEL = 200;
 interface PlayerState {
   rotDir: -1 | 0 | 1;
   moving: -1 | 0 | 1;
+  velScaling: number;
+  rotVel: number;
 }
 
 export interface IPlayer {
@@ -15,8 +17,6 @@ export interface IPlayer {
   y: number;
   angle: number;
   velocity: number;
-  velScaling: number;
-  rotVel: number;
   state: PlayerState;
 }
 
@@ -33,11 +33,11 @@ export class Player implements IPlayer {
   y: number;
   angle: number;
   velocity: number;
-  velScaling: number;
-  rotVel: number;
   state: {
     rotDir: -1 | 0 | 1;
     moving: -1 | 0 | 1;
+    velScaling: number;
+    rotVel: number;
   };
 
   constructor(id: number) {
@@ -47,11 +47,11 @@ export class Player implements IPlayer {
     // this.angle = properMod((-90 * Math.PI) / 180, 2 * Math.PI);
     this.angle = 0;
     this.velocity = 0;
-    this.velScaling = 1;
-    this.rotVel = 1;
     this.state = {
       rotDir: 0,
       moving: 0,
+      velScaling: 1,
+      rotVel: 1,
     };
   }
 
@@ -61,8 +61,6 @@ export class Player implements IPlayer {
     p.y = player.y;
     p.angle = player.angle;
     p.velocity = player.velocity;
-    p.velScaling = player.velScaling;
-    p.rotVel = player.rotVel;
     p.setState(player.state);
     p.color = player.color;
     return p;
@@ -90,8 +88,6 @@ export class Player implements IPlayer {
     this.y = player.y;
     this.angle = player.angle;
     this.velocity = player.velocity;
-    this.velScaling = player.velScaling;
-    this.rotVel = player.rotVel;
     if (onlyPhysics) return;
 
     this.setState(player.state);
@@ -120,6 +116,13 @@ export class Player implements IPlayer {
     this.state.moving = 0;
   }
 
+  resetMovement() {
+    this.state.moving = 0;
+    this.state.rotDir = 0;
+    this.state.rotVel = 1;
+    this.state.velScaling = 1;
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = this.color;
     ctx.strokeStyle = this.frontColor;
@@ -137,11 +140,11 @@ export class Player implements IPlayer {
 
   // dt in s
   update(dt: number) {
-    this.angle += ROT_VEL * this.state.rotDir * this.rotVel * dt;
+    this.angle += ROT_VEL * this.state.rotDir * this.state.rotVel * dt;
     this.angle = properMod(this.angle, 2 * Math.PI);
     this.velocity = this.state.moving * MOV_VEL;
-    this.x += Math.cos(this.angle) * this.velocity * this.velScaling * dt;
-    this.y += Math.sin(this.angle) * this.velocity * this.velScaling * dt;
+    this.x += Math.cos(this.angle) * this.velocity * this.state.velScaling * dt;
+    this.y += Math.sin(this.angle) * this.velocity * this.state.velScaling * dt;
     this.x = properMod(this.x, this.CANVAS_WIDTH);
     this.y = properMod(this.y, this.CANVAS_HEIGHT);
   }
@@ -159,8 +162,5 @@ export interface ClientMessage {
   playerId: number;
   msgSeq: number;
   ts: number; // microseconds
-  state: {
-    moving: -1 | 0 | 1;
-    rotDir: -1 | 0 | 1;
-  };
+  state: PlayerState;
 }

@@ -16,11 +16,33 @@ canvas {
   flex-direction: row;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1rem;
+  gap: 2rem;
   width: 100%;
   margin: 0;
 }
 
 #menuControls {
   margin-bottom: 2rem;
+  display: grid;
+  grid-template-columns: 50% 50%;
+  justify-items: start;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+#serverConnection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-grow: unset;
+  gap: 2px;
+}
+
+#serverConnection button {
+  width: min-content;
+}
+
+#camDiv {
+  margin-top: 1.5rem;
+  width: min-content;
 }

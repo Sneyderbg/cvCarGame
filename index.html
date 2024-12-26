@@ -1,37 +1,42 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>carGame</title>
+  </head>
 
-<head>
-  <meta charset="UTF-8" />
-  <link rel="stylesheet" href="style.css" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>carGame</title>
-</head>
-
-<body>
-  <div id="app">
-    <div id="main">
-      <span id="playerId">Connecting</span>
-      <canvas id="canvas" width="800" height="600">
-      </canvas>
-    </div>
-    <div >
-      <div id="menuControls">
-        <label>cam: </label>
-        <select id="camSelect">
+  <body>
+    <div id="app">
+      <div id="main">
+        <span id="playerId"></span>
+        <canvas id="canvas" width="800" height="600"> </canvas>
+      </div>
+      <div id="camDiv">
+        <div id="menuControls">
+          <label for="serverIp">Server ip:</label>
+          <div id="serverConnection">
+            <input id="serverIp" />
+            <button id="serverConnect">Connect</button>
+          </div>
+          <label for="enableCam">Enable cam</label>
+          <input type="checkbox" id="enableCam" />
+          <label for="camSelect">Camera:</label>
+          <select id="camSelect">
             <option selected value="none">---</option>
           </select>
-        <input type="checkbox" id="enableCam">Enable cam</input>
-        <input type="color" id="color"></input>
-        <input type="range" id="colorAmp"></input>
-      </div>
-      <div>
-        <canvas id="camCanvas" width="400" height="300"></canvas>
-        <video hidden id="cam" width="640" height="480"></video>
+          <label for="color">Color</label>
+          <input type="color" id="color" />
+          <label for="colorAmp">Color amplitude</label>
+          <input type="range" id="colorAmp" />
+        </div>
+        <div>
+          <canvas id="camCanvas" width="400" height="300"></canvas>
+          <video hidden id="cam" width="640" height="480"></video>
+        </div>
       </div>
     </div>
-  </div>
-  <script type="module" src="./src/main.ts"></script>
-</body>
-
+    <script type="module" src="./src/main.ts"></script>
+  </body>
 </html>
