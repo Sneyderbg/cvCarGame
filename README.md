@@ -13,5 +13,5 @@ bun dev
 - **vite**: runs client only
 - **server**: runs server only
 
-You can visit the page deployed at https://sneyderbg.github.io/cvCarGame/, and in order to play online you would need to create the server manually
-using the last command above and connecting to the respective ip from the client
+You can visit the page deployed at https://sneyderbg.github.io/cvCarGame/, and in order to play online you would need to deploy or create your own server
+using the last command above and configuring it with a valid ssl certificate.
